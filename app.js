@@ -2,7 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const bodyParser = require("body-parser");
 const mongoose = require("mongoose");
-const encrypt = require("mongoose-encryption");
+const bcrypt = require("bcrypt");
 
 mongoose.connect("mongodb://localhost:27017/userDB", {
     useNewUrlParser: true,
@@ -13,11 +13,6 @@ const userShcema = new mongoose.Schema({
     _id: mongoose.Types.ObjectId,
     email: String,
     password: String
-});
-
-userShcema.plugin(encrypt, {
-    secret: process.env.SECRET_KEY,
-    encryptedFields: ["password"]
 });
 
 const User = mongoose.model("User", userShcema);
@@ -45,12 +40,10 @@ app.route("/login")
         }, function (err, user) {
             if (err) throw err;
             if (user) {
-                if (user.password === password) {
-                    console.log("match found");
-                    res.redirect("/secret");
-                } else {
-                    console.log("password not match");
-                }
+                bcrypt.compare(password, user.password, function (err, match) {
+                    if (err) throw err;
+                    if (match) res.redirect("/secret");
+                });
             } else {
                 console.log("user not found");
             }
@@ -62,17 +55,22 @@ app.route("/register")
         res.render("register");
     })
     .post((req, res) => {
-        const user = new User({
-            _id: new mongoose.Types.ObjectId(),
-            email: req.body.username,
-            password: req.body.password
-        });
-
-        user.save(function (err) {
+        bcrypt.genSalt(10, function (err, salt) {
             if (err) throw err;
-            res.redirect("/secret");
-        });
+            bcrypt.hash(req.body.password, salt, function (err, hash) {
+                if (err) throw err;
+                const user = new User({
+                    _id: new mongoose.Types.ObjectId(),
+                    email: req.body.username,
+                    password: hash
+                });
 
+                user.save(function (err) {
+                    if (err) throw err;
+                    res.redirect("/secret");
+                });
+            });
+        });
     });
 
 app.get("/secret", function (req, res) {
